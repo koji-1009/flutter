@@ -1038,7 +1038,11 @@ class MultiFrameImageStreamCompleter extends ImageStreamCompleter {
       final int completedCycles = _framesEmitted ~/ _codec!.frameCount;
       if (_codec!.repetitionCount == -1 || completedCycles <= _codec!.repetitionCount) {
         _decodeNextFrameAndSchedule();
+        return;
       }
+
+      _codec!.dispose();
+      _codec = null;
       return;
     }
     final Duration delay = _frameDuration! - (timestamp - _shownTimestamp);
@@ -1088,6 +1092,9 @@ class MultiFrameImageStreamCompleter extends ImageStreamCompleter {
       ));
       _nextFrame!.image.dispose();
       _nextFrame = null;
+
+      _codec!.dispose();
+      _codec = null;
       return;
     }
     _scheduleAppFrame();
