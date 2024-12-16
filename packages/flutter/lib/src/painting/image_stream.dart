@@ -1041,6 +1041,7 @@ class MultiFrameImageStreamCompleter extends ImageStreamCompleter {
         return;
       }
 
+      print('MultiFrameImageStreamCompleter:_handleAppFrame: call cadec.dispose()');
       _codec!.dispose();
       _codec = null;
       return;
@@ -1098,6 +1099,7 @@ class MultiFrameImageStreamCompleter extends ImageStreamCompleter {
       _nextFrame!.image.dispose();
       _nextFrame = null;
 
+      print('MultiFrameImageStreamCompleter:_decodeNextFrameAndSchedule: call cadec.dispose()');
       _codec!.dispose();
       _codec = null;
       return;
@@ -1143,6 +1145,7 @@ class MultiFrameImageStreamCompleter extends ImageStreamCompleter {
       _chunkSubscription?.cancel();
       _chunkSubscription = null;
 
+      print('MultiFrameImageStreamCompleter:_maybeDispose: call cadec.dispose()');
       _codec?.dispose();
       _codec = null;
     }
