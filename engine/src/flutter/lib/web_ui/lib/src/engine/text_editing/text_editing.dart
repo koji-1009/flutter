@@ -510,11 +510,7 @@ class AutofillInfo {
       if (autofillHint != null) {
         element.name = autofillHint;
         element.id = autofillHint;
-        if (autofillHint.contains('password')) {
-          element.type = 'password';
-        } else {
-          element.type = 'text';
-        }
+        element.type = 'text';
       }
       element.autocomplete = autofillHint ?? 'on';
     } else if (domInstanceOfString(domElement, 'HTMLTextAreaElement')) {

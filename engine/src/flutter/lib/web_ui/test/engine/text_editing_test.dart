@@ -167,7 +167,7 @@ Future<void> testMain() async {
       expect(defaultTextEditingRoot.querySelectorAll('input'), hasLength(1));
       final DomElement input = defaultTextEditingRoot.querySelector('input')!;
       expect(editingStrategy!.domElement, input);
-      expect(input.getAttribute('type'), 'password');
+      expect(input.getAttribute('type'), 'text');
 
       editingStrategy!.disable();
     });
@@ -2697,7 +2697,7 @@ Future<void> testMain() async {
       // Autofill value is applied to the element.
       expect(firstElement.name, BrowserAutofillHints.instance.flutterToEngine('password'));
       expect(firstElement.id, BrowserAutofillHints.instance.flutterToEngine('password'));
-      expect(firstElement.type, 'password');
+      expect(firstElement.type, 'text');
       if (ui_web.browser.browserEngine == ui_web.BrowserEngine.firefox) {
         expect(firstElement.name, BrowserAutofillHints.instance.flutterToEngine('password'));
       } else {
