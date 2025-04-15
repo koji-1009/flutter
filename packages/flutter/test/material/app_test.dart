@@ -365,71 +365,73 @@ void main() {
     );
   });
 
-  testWidgets("WidgetsApp doesn't rebuild routes when MediaQuery updates", (
-    WidgetTester tester,
-  ) async {
-    // Regression test for https://github.com/flutter/flutter/issues/37878
-    addTearDown(tester.platformDispatcher.clearAllTestValues);
-    addTearDown(tester.view.reset);
+  testWidgets(
+    "WidgetsApp doesn't rebuild routes when MediaQuery updates",
+    (WidgetTester tester) async {
+      // Regression test for https://github.com/flutter/flutter/issues/37878
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      addTearDown(tester.view.reset);
 
-    int routeBuildCount = 0;
-    int dependentBuildCount = 0;
+      int routeBuildCount = 0;
+      int dependentBuildCount = 0;
 
-    await tester.pumpWidget(
-      WidgetsApp(
-        color: const Color.fromARGB(255, 255, 255, 255),
-        onGenerateRoute: (_) {
-          return PageRouteBuilder<void>(
-            pageBuilder: (_, _, _) {
-              routeBuildCount++;
-              return Builder(
-                builder: (BuildContext context) {
-                  dependentBuildCount++;
-                  MediaQuery.of(context);
-                  return Container();
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color.fromARGB(255, 255, 255, 255),
+          onGenerateRoute: (_) {
+            return PageRouteBuilder<void>(
+              pageBuilder: (_, _, _) {
+                routeBuildCount++;
+                return Builder(
+                  builder: (BuildContext context) {
+                    dependentBuildCount++;
+                    MediaQuery.of(context);
+                    return Container();
+                  },
+                );
+              },
+            );
+          },
+        ),
+      );
 
-    expect(routeBuildCount, equals(1));
-    expect(dependentBuildCount, equals(1));
+      expect(routeBuildCount, equals(1));
+      expect(dependentBuildCount, equals(1));
 
-    // didChangeMetrics
-    tester.view.physicalSize = const Size(42, 42);
+      // didChangeMetrics
+      tester.view.physicalSize = const Size(42, 42);
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(routeBuildCount, equals(1));
-    expect(dependentBuildCount, equals(2));
+      expect(routeBuildCount, equals(1));
+      expect(dependentBuildCount, equals(2));
 
-    // didChangeTextScaleFactor
-    tester.platformDispatcher.textScaleFactorTestValue = 42;
+      // didChangeTextScaleFactor
+      tester.platformDispatcher.textScaleFactorTestValue = 42;
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(routeBuildCount, equals(1));
-    expect(dependentBuildCount, equals(3));
+      expect(routeBuildCount, equals(1));
+      expect(dependentBuildCount, equals(3));
 
-    // didChangePlatformBrightness
-    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      // didChangePlatformBrightness
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(routeBuildCount, equals(1));
-    expect(dependentBuildCount, equals(4));
+      expect(routeBuildCount, equals(1));
+      expect(dependentBuildCount, equals(4));
 
-    // didChangeAccessibilityFeatures
-    tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
+      // didChangeAccessibilityFeatures
+      tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
 
-    await tester.pump();
+      await tester.pump();
 
-    expect(routeBuildCount, equals(1));
-    expect(dependentBuildCount, equals(5));
-  });
+      expect(routeBuildCount, equals(1));
+      expect(dependentBuildCount, equals(5));
+    },
+    semanticsEnabled: false, // https://github.com/flutter/flutter/issues/67571
+  );
 
   testWidgets('Can get text scale from media query', (WidgetTester tester) async {
     TextScaler? textScaler;
@@ -719,57 +721,63 @@ void main() {
     expect(appliedTheme.brightness, Brightness.dark);
   });
 
-  testWidgets('MaterialApp uses high contrast theme when appropriate', (WidgetTester tester) async {
-    addTearDown(tester.platformDispatcher.clearAllTestValues);
+  testWidgets(
+    'MaterialApp uses high contrast theme when appropriate',
+    (WidgetTester tester) async {
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
 
-    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
-    tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
 
-    late ThemeData appliedTheme;
+      late ThemeData appliedTheme;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(primaryColor: Colors.lightBlue),
-        highContrastTheme: ThemeData(primaryColor: Colors.blue),
-        home: Builder(
-          builder: (BuildContext context) {
-            appliedTheme = Theme.of(context);
-            return const SizedBox();
-          },
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(primaryColor: Colors.lightBlue),
+          highContrastTheme: ThemeData(primaryColor: Colors.blue),
+          home: Builder(
+            builder: (BuildContext context) {
+              appliedTheme = Theme.of(context);
+              return const SizedBox();
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(appliedTheme.primaryColor, Colors.blue);
-  });
+      expect(appliedTheme.primaryColor, Colors.blue);
+    },
+    semanticsEnabled: false, // https://github.com/flutter/flutter/issues/67571
+  );
 
-  testWidgets('MaterialApp uses high contrast dark theme when appropriate', (
-    WidgetTester tester,
-  ) async {
-    addTearDown(tester.platformDispatcher.clearAllTestValues);
+  testWidgets(
+    'MaterialApp uses high contrast dark theme when appropriate',
+    (WidgetTester tester) async {
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
 
-    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
-    tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      tester.platformDispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
 
-    late ThemeData appliedTheme;
+      late ThemeData appliedTheme;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(primaryColor: Colors.lightBlue),
-        darkTheme: ThemeData(primaryColor: Colors.lightGreen),
-        highContrastTheme: ThemeData(primaryColor: Colors.blue),
-        highContrastDarkTheme: ThemeData(primaryColor: Colors.green),
-        home: Builder(
-          builder: (BuildContext context) {
-            appliedTheme = Theme.of(context);
-            return const SizedBox();
-          },
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(primaryColor: Colors.lightBlue),
+          darkTheme: ThemeData(primaryColor: Colors.lightGreen),
+          highContrastTheme: ThemeData(primaryColor: Colors.blue),
+          highContrastDarkTheme: ThemeData(primaryColor: Colors.green),
+          home: Builder(
+            builder: (BuildContext context) {
+              appliedTheme = Theme.of(context);
+              return const SizedBox();
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(appliedTheme.primaryColor, Colors.green);
-  });
+      expect(appliedTheme.primaryColor, Colors.green);
+    },
+    semanticsEnabled: false, // https://github.com/flutter/flutter/issues/67571
+  );
 
   testWidgets('MaterialApp uses dark theme when no high contrast dark theme is provided', (
     WidgetTester tester,

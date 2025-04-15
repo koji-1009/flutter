@@ -398,69 +398,72 @@ void main() {
       expect(data.gestureSettings, DeviceGestureSettings.fromView(tester.view));
       expect(data.displayFeatures, tester.view.displayFeatures);
     },
+    semanticsEnabled: false, // https://github.com/flutter/flutter/issues/67571
   );
 
-  testWidgets('MediaQuery.fromView updates on notifications (no parent data)', (
-    WidgetTester tester,
-  ) async {
-    addTearDown(() => tester.platformDispatcher.clearAllTestValues());
-    addTearDown(() => tester.view.reset());
+  testWidgets(
+    'MediaQuery.fromView updates on notifications (no parent data)',
+    (WidgetTester tester) async {
+      addTearDown(() => tester.platformDispatcher.clearAllTestValues());
+      addTearDown(() => tester.view.reset());
 
-    tester.platformDispatcher
-      ..textScaleFactorTestValue = 123
-      ..platformBrightnessTestValue = Brightness.dark
-      ..accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
-    tester.view.devicePixelRatio = 44;
+      tester.platformDispatcher
+        ..textScaleFactorTestValue = 123
+        ..platformBrightnessTestValue = Brightness.dark
+        ..accessibilityFeaturesTestValue = FakeAccessibilityFeatures.allOn;
+      tester.view.devicePixelRatio = 44;
 
-    late MediaQueryData data;
-    MediaQueryData? outerData;
-    int rebuildCount = 0;
-    await tester.pumpWidget(
-      wrapWithView: false,
-      Builder(
-        builder: (BuildContext context) {
-          outerData = MediaQuery.maybeOf(context);
-          return MediaQuery.fromView(
-            view: tester.view,
-            child: Builder(
-              builder: (BuildContext context) {
-                rebuildCount++;
-                data = MediaQuery.of(context);
-                return View(view: tester.view, child: const SizedBox());
-              },
-            ),
-          );
-        },
-      ),
-    );
+      late MediaQueryData data;
+      MediaQueryData? outerData;
+      int rebuildCount = 0;
+      await tester.pumpWidget(
+        wrapWithView: false,
+        Builder(
+          builder: (BuildContext context) {
+            outerData = MediaQuery.maybeOf(context);
+            return MediaQuery.fromView(
+              view: tester.view,
+              child: Builder(
+                builder: (BuildContext context) {
+                  rebuildCount++;
+                  data = MediaQuery.of(context);
+                  return View(view: tester.view, child: const SizedBox());
+                },
+              ),
+            );
+          },
+        ),
+      );
 
-    expect(outerData, isNull);
-    expect(rebuildCount, 1);
+      expect(outerData, isNull);
+      expect(rebuildCount, 1);
 
-    expect(data.textScaler, const TextScaler.linear(123));
-    tester.platformDispatcher.textScaleFactorTestValue = 456;
-    await tester.pump();
-    expect(data.textScaler, const TextScaler.linear(456));
-    expect(rebuildCount, 2);
+      expect(data.textScaler, const TextScaler.linear(123));
+      tester.platformDispatcher.textScaleFactorTestValue = 456;
+      await tester.pump();
+      expect(data.textScaler, const TextScaler.linear(456));
+      expect(rebuildCount, 2);
 
-    expect(data.platformBrightness, Brightness.dark);
-    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
-    await tester.pump();
-    expect(data.platformBrightness, Brightness.light);
-    expect(rebuildCount, 3);
+      expect(data.platformBrightness, Brightness.dark);
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      await tester.pump();
+      expect(data.platformBrightness, Brightness.light);
+      expect(rebuildCount, 3);
 
-    expect(data.accessibleNavigation, true);
-    tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures();
-    await tester.pump();
-    expect(data.accessibleNavigation, false);
-    expect(rebuildCount, 4);
+      expect(data.accessibleNavigation, true);
+      tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures();
+      await tester.pump();
+      expect(data.accessibleNavigation, false);
+      expect(rebuildCount, 4);
 
-    expect(data.devicePixelRatio, 44);
-    tester.view.devicePixelRatio = 55;
-    await tester.pump();
-    expect(data.devicePixelRatio, 55);
-    expect(rebuildCount, 5);
-  });
+      expect(data.devicePixelRatio, 44);
+      tester.view.devicePixelRatio = 55;
+      await tester.pump();
+      expect(data.devicePixelRatio, 55);
+      expect(rebuildCount, 5);
+    },
+    semanticsEnabled: false, // https://github.com/flutter/flutter/issues/67571
+  );
 
   testWidgets('MediaQuery.fromView updates on notifications (with parent data)', (
     WidgetTester tester,
