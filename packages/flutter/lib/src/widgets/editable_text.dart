@@ -5547,8 +5547,18 @@ class EditableTextState extends State<EditableText>
         ignoreNonCollapsedSelection: true,
       ),
     ),
-    ExtendSelectionVerticallyToAdjacentLineIntent: _makeOverridable(_verticalSelectionUpdateAction),
-    ExtendSelectionVerticallyToAdjacentPageIntent: _makeOverridable(_verticalSelectionUpdateAction),
+    ExtendSelectionVerticallyToAdjacentLineIntent: _makeOverridable(
+      _WebComposingDisablingCallbackAction<ExtendSelectionVerticallyToAdjacentLineIntent>(
+        this,
+        onInvoke: _verticalSelectionUpdateAction.invoke,
+      ),
+    ),
+    ExtendSelectionVerticallyToAdjacentPageIntent: _makeOverridable(
+      _WebComposingDisablingCallbackAction<ExtendSelectionVerticallyToAdjacentPageIntent>(
+        this,
+        onInvoke: _verticalSelectionUpdateAction.invoke,
+      ),
+    ),
     ExtendSelectionToNextParagraphBoundaryOrCaretLocationIntent: _makeOverridable(
       _UpdateTextSelectionAction<ExtendSelectionToNextParagraphBoundaryOrCaretLocationIntent>(
         this,
@@ -5579,7 +5589,9 @@ class EditableTextState extends State<EditableText>
         onInvoke: _scrollToDocumentBoundary,
       ),
     ),
-    ScrollIntent: CallbackAction<ScrollIntent>(onInvoke: _scroll),
+    ScrollIntent: _makeOverridable(
+      _WebComposingDisablingCallbackAction<ScrollIntent>(this, onInvoke: _scroll),
+    ),
 
     // Expand Selection
     ExpandSelectionToLineBreakIntent: _makeOverridable(

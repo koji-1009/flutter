@@ -3020,6 +3020,54 @@ void main() {
           reason: end.toString(),
         );
       });
+
+      testWidgets('pageUp in composing', (WidgetTester tester) async {
+        const SingleActivator end = SingleActivator(LogicalKeyboardKey.pageUp);
+
+        controller.value = const TextEditingValue(
+          text: testText,
+          selection: TextSelection(baseOffset: 0, extentOffset: 3),
+          composing: TextRange(start: 0, end: 3),
+        );
+
+        await tester.pumpWidget(buildEditableText(style: const TextStyle(fontSize: 12)));
+        await tester.pumpAndSettle();
+
+        await sendKeyCombination(tester, end);
+        await tester.pump();
+
+        // selection should not change.
+        expect(controller.text, testText);
+        expect(
+          controller.selection,
+          const TextSelection(baseOffset: 0, extentOffset: 3),
+          reason: end.toString(),
+        );
+      });
+
+      testWidgets('pageDown in composing', (WidgetTester tester) async {
+        const SingleActivator end = SingleActivator(LogicalKeyboardKey.pageDown);
+
+        controller.value = const TextEditingValue(
+          text: testText,
+          selection: TextSelection(baseOffset: 0, extentOffset: 3),
+          composing: TextRange(start: 0, end: 3),
+        );
+
+        await tester.pumpWidget(buildEditableText(style: const TextStyle(fontSize: 12)));
+        await tester.pumpAndSettle();
+
+        await sendKeyCombination(tester, end);
+        await tester.pump();
+
+        // selection should not change.
+        expect(controller.text, testText);
+        expect(
+          controller.selection,
+          const TextSelection(baseOffset: 0, extentOffset: 3),
+          reason: end.toString(),
+        );
+      });
     },
     skip: !kIsWeb, // [intended] specific tests target web.
   );
