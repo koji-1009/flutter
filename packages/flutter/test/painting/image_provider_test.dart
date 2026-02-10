@@ -74,8 +74,8 @@ void main() {
     expect(imageCache.statusForKey(provider).untracked, true);
     expect(imageCache.pendingImageCount, 0);
 
-    // Add an active listener to ensure the error is reported.
     final ImageStream stream = provider.resolve(ImageConfiguration.empty);
+    // Add a listener with onError to ensure the error is reported.
     final listener = ImageStreamListener(
       (ImageInfo info, bool syncCall) {},
       onError: (Object exception, StackTrace? stackTrace) {
@@ -83,6 +83,7 @@ void main() {
       },
     );
     stream.addListener(listener);
+    addTearDown(() => stream.removeListener(listener));
 
     expect(imageCache.statusForKey(provider).pending, true);
     expect(imageCache.pendingImageCount, 1);
@@ -90,7 +91,6 @@ void main() {
     expect(await error.future, isStateError);
     expect(imageCache.statusForKey(provider).untracked, true);
     expect(imageCache.pendingImageCount, 0);
-    stream.removeListener(listener);
   });
 
   test('File image with empty file throws expected error (load)', () async {
@@ -111,8 +111,7 @@ void main() {
       return Future<Codec>.value(createNoOpCodec());
     });
     expect(completer, isA<MultiFrameImageStreamCompleter>());
-
-    // Add an active listener to ensure the error is reported.
+    // Add a listener with onError to ensure the error is reported.
     final listener = ImageStreamListener(
       (ImageInfo info, bool syncCall) {},
       onError: (Object exception, StackTrace? stackTrace) {
@@ -120,9 +119,9 @@ void main() {
       },
     );
     completer.addListener(listener);
+    addTearDown(() => completer.removeListener(listener));
 
     expect(await error.future, isStateError);
-    completer.removeListener(listener);
   });
 
   test('File image sets tag', () async {
@@ -182,6 +181,7 @@ void main() {
     expect(imageCache.pendingImageCount, 0);
 
     final ImageStream stream = provider.resolve(ImageConfiguration.empty);
+    // Add a listener with onError to ensure the error is reported.
     final listener = ImageStreamListener(
       (ImageInfo info, bool syncCall) {},
       onError: (Object exception, StackTrace? stackTrace) {
@@ -189,6 +189,7 @@ void main() {
       },
     );
     stream.addListener(listener);
+    addTearDown(() => stream.removeListener(listener));
 
     expect(imageCache.statusForKey(provider).pending, true);
     expect(imageCache.pendingImageCount, 1);
@@ -205,7 +206,6 @@ void main() {
     // Invalid images are marked as pending so that we do not attempt to reload them.
     expect(imageCache.statusForKey(provider).untracked, false);
     expect(imageCache.pendingImageCount, 1);
-    stream.removeListener(listener);
   }, skip: kIsWeb); // [intended] The web cannot load files.
 
   test('ImageProvider toStrings', () async {
