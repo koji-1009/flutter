@@ -212,10 +212,10 @@ class ImageStreamListener {
   /// be handled. An error handler can explicitly rethrow the exception reported
   /// to it to safely indicate that it did not handle the exception.
   ///
-  /// If an image stream has no listeners that handled the error when the error
-  /// was first encountered, then the error is reported using
-  /// [FlutterError.reportError], with the [FlutterErrorDetails.silent] flag set
-  /// to true.
+  /// If the image stream has no error listeners (listeners with an [onError]
+  /// callback), the error is silently ignored. This prevents unnecessary
+  /// error noise (e.g., in crash reporting tools like Firebase Crashlytics)
+  /// when errors occur after the widget has been disposed.
   final ImageErrorListener? onError;
 
   @override
@@ -752,9 +752,9 @@ abstract class ImageStreamCompleter with Diagnosticable {
   /// occurred while resolving the image.
   ///
   /// If no error listeners (listeners with an [ImageStreamListener.onError]
-  /// specified) are attached, or if the handlers all rethrow the exception
-  /// verbatim (with `throw exception`), a [FlutterError] will be reported using
-  /// [FlutterError.reportError].
+  /// callback) are attached, the error is silently ignored. This prevents
+  /// unnecessary error noise (e.g., in crash reporting tools like Firebase
+  /// Crashlytics) when errors occur after the widget has been disposed.
   ///
   /// The `context` should be a string describing where the error was caught, in
   /// a form that will make sense in English when following the word "thrown",
