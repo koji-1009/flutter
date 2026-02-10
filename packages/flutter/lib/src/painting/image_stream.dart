@@ -214,8 +214,7 @@ class ImageStreamListener {
   ///
   /// If the image stream has no error listeners (listeners with an [onError]
   /// callback), the error is silently ignored. This prevents unnecessary
-  /// error noise (e.g., in crash reporting tools like Firebase Crashlytics)
-  /// when errors occur after the widget has been disposed.
+  /// error noise when errors occur after the widget has been disposed.
   final ImageErrorListener? onError;
 
   @override
@@ -753,8 +752,8 @@ abstract class ImageStreamCompleter with Diagnosticable {
   ///
   /// If no error listeners (listeners with an [ImageStreamListener.onError]
   /// callback) are attached, the error is silently ignored. This prevents
-  /// unnecessary error noise (e.g., in crash reporting tools like Firebase
-  /// Crashlytics) when errors occur after the widget has been disposed.
+  /// unnecessary error noise when errors occur after the widget has been
+  /// disposed.
   ///
   /// The `context` should be a string describing where the error was caught, in
   /// a form that will make sense in English when following the word "thrown",

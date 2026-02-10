@@ -102,12 +102,14 @@ void main() {
     final ImageStream stream = imageProvider.resolve(ImageConfiguration.empty);
     final completer = Completer<void>();
     final cacheCompleter = Completer<void>();
-    final listener = ImageStreamListener((ImageInfo info, bool syncCall) => completer.complete());
+    final listener = ImageStreamListener((ImageInfo info, bool syncCall) {
+      completer.complete();
+    });
     stream.addListener(listener);
     addTearDown(() => stream.removeListener(listener));
-    final cacheListener = ImageStreamListener(
-      (ImageInfo info, bool syncCall) => cacheCompleter.complete(),
-    );
+    final cacheListener = ImageStreamListener((ImageInfo info, bool syncCall) {
+      cacheCompleter.complete();
+    });
     cacheStream.addListener(cacheListener);
     addTearDown(() => cacheStream.removeListener(cacheListener));
     await Future.wait(<Future<void>>[completer.future, cacheCompleter.future]);
