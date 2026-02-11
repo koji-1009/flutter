@@ -413,6 +413,10 @@ void main() {
       ),
     );
     codecCompleter.complete(mockCodec);
+    // MultiFrameImageStreamCompleter only sets an error handler for the next
+    // frame future after the codec future has completed.
+    // Idling here lets the MultiFrameImageStreamCompleter advance and set the
+    // error handler for the nextFrame future.
     await tester.idle();
 
     mockCodec.failNextFrame('frame completion error');
