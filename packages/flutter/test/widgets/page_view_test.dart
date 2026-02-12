@@ -1789,7 +1789,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('PageView cacheExtent does not affect ïhasImplicitScrolling semantics flag', (
+  testWidgets('PageView cacheExtent does not affect hasImplicitScrolling semantics flag', (
     WidgetTester tester,
   ) async {
     final semantics = SemanticsTester(tester);
