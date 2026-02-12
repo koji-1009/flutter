@@ -997,7 +997,9 @@ class _PageViewState extends State<PageView> {
             widget.scrollBehavior ?? ScrollConfiguration.of(context).copyWith(scrollbars: false),
         viewportBuilder: (BuildContext context, ViewportOffset position) {
           return Viewport(
-            cacheExtent: widget.cacheExtent ?? (widget.allowImplicitScrolling ? 1.0 : 0.0),
+            scrollCacheExtent: ScrollCacheExtent.viewport(
+              widget.cacheExtent ?? (widget.allowImplicitScrolling ? 1.0 : 0.0),
+            ),
             cacheExtentStyle: CacheExtentStyle.viewport,
             axisDirection: axisDirection,
             offset: position,
