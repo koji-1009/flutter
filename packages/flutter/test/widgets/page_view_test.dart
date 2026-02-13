@@ -1766,7 +1766,6 @@ void main() {
 
   testWidgets('PageView semantics respects allowImplicitScrolling', (WidgetTester tester) async {
     final semantics = SemanticsTester(tester);
-    addTearDown(semantics.dispose);
 
     // Off-screen pages should be excluded from semantics.
     await tester.pumpWidget(
@@ -1792,13 +1791,14 @@ void main() {
 
     expect(semantics, includesNodeWith(label: 'Page 1'));
     expect(semantics, includesNodeWith(label: 'Page 2'));
+
+    semantics.dispose();
   });
 
   testWidgets('PageView scrollCacheExtent does not affect hasImplicitScrolling semantics flag', (
     WidgetTester tester,
   ) async {
     final semantics = SemanticsTester(tester);
-    addTearDown(semantics.dispose);
 
     await tester.pumpWidget(
       Directionality(
@@ -1821,6 +1821,8 @@ void main() {
       semantics,
       isNot(includesNodeWith(flags: <SemanticsFlag>[SemanticsFlag.hasImplicitScrolling])),
     );
+
+    semantics.dispose();
   });
 
   testWidgets('PageView showOnScreen blocks scrolling when allowImplicitScrolling is false', (
