@@ -691,16 +691,16 @@ class PageView extends StatefulWidget {
     List<Widget> children = const <Widget>[],
     this.dragStartBehavior = DragStartBehavior.start,
     this.allowImplicitScrolling = false,
-    this.cacheExtent,
+    this.scrollCacheExtent,
     this.restorationId,
     this.clipBehavior = Clip.hardEdge,
     this.hitTestBehavior = HitTestBehavior.opaque,
     this.scrollBehavior,
     this.padEnds = true,
   }) : assert(
-         !allowImplicitScrolling || (cacheExtent ?? 1.0) > 0.0,
-         'If allowImplicitScrolling is true, cacheExtent must be greater than 0.0 to ensure '
-         'that the next page is cached and available for accessibility scrolling.',
+         !allowImplicitScrolling || (scrollCacheExtent?.value ?? 1.0) > 0.0,
+         'If allowImplicitScrolling is true, scrollCacheExtent must be greater than 0.0 '
+         'to ensure that the next page is cached and available for accessibility scrolling.',
        ),
        childrenDelegate = SliverChildListDelegate(children);
 
@@ -742,16 +742,16 @@ class PageView extends StatefulWidget {
     int? itemCount,
     this.dragStartBehavior = DragStartBehavior.start,
     this.allowImplicitScrolling = false,
-    this.cacheExtent,
+    this.scrollCacheExtent,
     this.restorationId,
     this.clipBehavior = Clip.hardEdge,
     this.hitTestBehavior = HitTestBehavior.opaque,
     this.scrollBehavior,
     this.padEnds = true,
   }) : assert(
-         !allowImplicitScrolling || (cacheExtent ?? 1.0) > 0.0,
-         'If allowImplicitScrolling is true, cacheExtent must be greater than 0.0 to ensure '
-         'that the next page is cached and available for accessibility scrolling.',
+         !allowImplicitScrolling || (scrollCacheExtent?.value ?? 1.0) > 0.0,
+         'If allowImplicitScrolling is true, scrollCacheExtent must be greater than 0.0 '
+         'to ensure that the next page is cached and available for accessibility scrolling.',
        ),
        childrenDelegate = SliverChildBuilderDelegate(
          itemBuilder,
@@ -770,7 +770,7 @@ class PageView extends StatefulWidget {
   /// {@end-tool}
   ///
   /// {@macro flutter.widgets.PageView.allowImplicitScrolling}
-  const PageView.custom({
+  PageView.custom({
     super.key,
     this.scrollDirection = Axis.horizontal,
     this.reverse = false,
@@ -781,16 +781,16 @@ class PageView extends StatefulWidget {
     required this.childrenDelegate,
     this.dragStartBehavior = DragStartBehavior.start,
     this.allowImplicitScrolling = false,
-    this.cacheExtent,
+    this.scrollCacheExtent,
     this.restorationId,
     this.clipBehavior = Clip.hardEdge,
     this.hitTestBehavior = HitTestBehavior.opaque,
     this.scrollBehavior,
     this.padEnds = true,
   }) : assert(
-         !allowImplicitScrolling || (cacheExtent ?? 1.0) > 0.0,
-         'If allowImplicitScrolling is true, cacheExtent must be greater than 0.0 to ensure '
-         'that the next page is cached and available for accessibility scrolling.',
+         !allowImplicitScrolling || (scrollCacheExtent?.value ?? 1.0) > 0.0,
+         'If allowImplicitScrolling is true, scrollCacheExtent must be greater than 0.0 '
+         'to ensure that the next page is cached and available for accessibility scrolling.',
        );
 
   /// Controls whether the widget's pages will respond to
@@ -806,16 +806,29 @@ class PageView extends StatefulWidget {
   /// will traverse to the next page in the page view.
   final bool allowImplicitScrolling;
 
-  /// {@macro flutter.rendering.RenderViewportBase.cacheExtent}
+  /// {@macro flutter.rendering.RenderViewportBase.scrollCacheExtent}
   ///
-  /// In [PageView], the [cacheExtent] is treated as the number of pages, not
-  /// pixels, because the [Viewport] configuration uses [CacheExtentStyle.viewport].
+  /// In [PageView], the default [scrollCacheExtent] uses
+  /// [ScrollCacheExtent.viewport], where the value represents the number of
+  /// viewport lengths to cache beyond the visible area.
   ///
-  /// If null, and [allowImplicitScrolling] is true, the [cacheExtent] defaults
-  /// to 1.0, which means one additional page before and after the visible page
-  /// is preserved in the cache. If [allowImplicitScrolling] is false, the
-  /// [cacheExtent] defaults to 0.0.
-  final double? cacheExtent;
+  /// When [PageController.viewportFraction] is 1.0 (the default), this is
+  /// equivalent to the number of pages. For example,
+  /// `ScrollCacheExtent.viewport(2.0)` caches 2 pages before and after the
+  /// visible page.
+  ///
+  /// When [PageController.viewportFraction] is less than 1.0, multiple pages
+  /// may be visible in a single viewport, so `ScrollCacheExtent.viewport(1.0)`
+  /// may cache more than one additional page in each direction.
+  ///
+  /// [ScrollCacheExtent.pixels] can also be used to specify the cache extent
+  /// in logical pixels instead of viewport sizes.
+  ///
+  /// If null, and [allowImplicitScrolling] is true, the [scrollCacheExtent]
+  /// defaults to `ScrollCacheExtent.viewport(1.0)`. If
+  /// [allowImplicitScrolling] is false, it defaults to
+  /// `ScrollCacheExtent.viewport(0.0)`.
+  final ScrollCacheExtent? scrollCacheExtent;
 
   /// {@macro flutter.widgets.scrollable.restorationId}
   final String? restorationId;
@@ -997,10 +1010,9 @@ class _PageViewState extends State<PageView> {
             widget.scrollBehavior ?? ScrollConfiguration.of(context).copyWith(scrollbars: false),
         viewportBuilder: (BuildContext context, ViewportOffset position) {
           return Viewport(
-            scrollCacheExtent: ScrollCacheExtent.viewport(
-              widget.cacheExtent ?? (widget.allowImplicitScrolling ? 1.0 : 0.0),
-            ),
-            cacheExtentStyle: CacheExtentStyle.viewport,
+            scrollCacheExtent:
+                widget.scrollCacheExtent ??
+                ScrollCacheExtent.viewport(widget.allowImplicitScrolling ? 1.0 : 0.0),
             axisDirection: axisDirection,
             offset: position,
             clipBehavior: widget.clipBehavior,
@@ -1037,6 +1049,12 @@ class _PageViewState extends State<PageView> {
         ifTrue: 'allow implicit scrolling',
       ),
     );
-    description.add(DoubleProperty('cacheExtent', widget.cacheExtent, defaultValue: null));
+    description.add(
+      DiagnosticsProperty<ScrollCacheExtent>(
+        'scrollCacheExtent',
+        widget.scrollCacheExtent,
+        defaultValue: null,
+      ),
+    );
   }
 }
