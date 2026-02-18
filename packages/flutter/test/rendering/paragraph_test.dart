@@ -1552,6 +1552,32 @@ void main() {
     expect(alphabetic, isNot(equals(ideographic)));
     expect(ideographic, greaterThan(alphabetic));
   });
+
+  test('RenderParagraph computeDryBaseline ideographic baseline', () {
+    // computeDryBaseline should match computeDistanceToActualBaseline for both
+    // alphabetic and ideographic baselines.
+    final paragraph = RenderParagraph(
+      const TextSpan(text: 'Hello world', style: TextStyle(fontSize: 10.0)),
+      textDirection: TextDirection.ltr,
+    );
+    layout(paragraph);
+
+    final double alphabetic = paragraph.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    final double ideographic = paragraph.computeDistanceToActualBaseline(TextBaseline.ideographic);
+
+    final double dryAlphabetic = paragraph.computeDryBaseline(
+      const BoxConstraints(maxWidth: 800.0),
+      TextBaseline.alphabetic,
+    );
+    final double dryIdeographic = paragraph.computeDryBaseline(
+      const BoxConstraints(maxWidth: 800.0),
+      TextBaseline.ideographic,
+    );
+
+    expect(dryAlphabetic, equals(alphabetic));
+    expect(dryIdeographic, equals(ideographic));
+    expect(dryAlphabetic, isNot(equals(dryIdeographic)));
+  });
 }
 
 class MockCanvas extends Fake implements Canvas {
