@@ -2497,7 +2497,8 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
 // The current password-autofillable input fields that have yet to be saved.
 @property(nonatomic, readonly)
     NSMutableDictionary<NSString*, FlutterTextInputView*>* autofillContext;
-@property(nonatomic, readonly) BOOL pendingInputHiderRemoval;
+@property(nonatomic, readonly) BOOL pendingAutofillRemoval;
+@property(nonatomic, readonly) BOOL pendingInputViewRemoval;
 @property(nonatomic, retain) FlutterTextInputView* activeView;
 @property(nonatomic, retain) FlutterTextInputViewAccessibilityHider* inputHider;
 @property(nonatomic, readonly, weak) id<FlutterViewResponder> viewResponder;
@@ -2512,7 +2513,8 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
 
 @implementation FlutterTextInputPlugin {
   NSTimer* _enableFlutterTextInputViewAccessibilityTimer;
-  BOOL _pendingInputHiderRemoval;
+  BOOL _pendingInputViewRemoval;
+  BOOL _pendingAutofillRemoval;
 }
 
 - (instancetype)initWithDelegate:(id<FlutterTextInputDelegate>)textInputDelegate {
@@ -2822,6 +2824,11 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
 - (void)showTextInput {
   _activeView.viewResponder = _viewResponder;
   [self addToInputParentViewIfNeeded:_activeView];
+
+  // Reset pending removal flag to prevent stale flags from a previous
+  // clearTextInputClient call from causing unintended view removal.
+  _pendingInputViewRemoval = NO;
+
   [_activeView becomeFirstResponder];
 }
 
@@ -2834,6 +2841,16 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
 
 - (void)hideTextInput {
   [_activeView resignFirstResponder];
+
+  // Remove the input view from the view hierarchy after resigning first responder.
+  // This flag is set by clearTextInputClient when autofillContext is empty.
+  // Removing after resignFirstResponder (not during clearTextInputClient) prevents
+  // keyboard flicker when switching between text fields.
+  if (_pendingInputViewRemoval) {
+    [_activeView removeFromSuperview];
+    [_inputHider removeFromSuperview];
+    _pendingInputViewRemoval = NO;
+  }
 }
 
 - (void)triggerAutofillSave:(BOOL)saveEntries {
@@ -2852,10 +2869,11 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
   [self cleanUpViewHierarchy:YES clearText:!saveEntries delayRemoval:NO];
 
   // Trigger removal of input hider if needed.
-  if (_pendingInputHiderRemoval) {
+  if (_pendingAutofillRemoval) {
     [_activeView removeFromSuperview];
     [_inputHider removeFromSuperview];
-    _pendingInputHiderRemoval = NO;
+    _pendingAutofillRemoval = NO;
+    _pendingInputViewRemoval = NO;
   }
 
   [self addToInputParentViewIfNeeded:_activeView];
@@ -3112,12 +3130,26 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
   [self removeEnableFlutterTextInputViewAccessibilityTimer];
   _activeView.accessibilityEnabled = NO;
 
+  // Schedule the removal of the input view and input hider.
+  // The removal is deferred to avoid keyboard flicker when switching between
+  // text fields, where clearTextInputClient is called before the next
+  // setTextInputClient.
+  // See: https://github.com/flutter/flutter/issues/180842
   if (_autofillContext.count == 0) {
-    [_activeView removeFromSuperview];
-    [_inputHider removeFromSuperview];
+    if (_activeView.isFirstResponder) {
+      // Still first responder: defer removal to hideTextInput,
+      // right after resignFirstResponder dismisses the keyboard.
+      _pendingInputViewRemoval = YES;
+    } else {
+      // Already resigned (hideTextInput was called first):
+      // safe to remove immediately since the keyboard is already dismissed.
+      [_activeView removeFromSuperview];
+      [_inputHider removeFromSuperview];
+    }
   } else {
-    // If _autofillContext is not empty, triggerAutofillSave will be called to clean up the views.
-    _pendingInputHiderRemoval = YES;
+    // Autofill context exists: removal will be performed in triggerAutofillSave,
+    // which is called by finishAutofillContext to save autofill entries.
+    _pendingAutofillRemoval = YES;
   }
 }
 
