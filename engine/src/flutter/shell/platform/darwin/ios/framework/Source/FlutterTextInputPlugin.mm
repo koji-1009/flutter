@@ -3136,6 +3136,7 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
   // setTextInputClient.
   // See: https://github.com/flutter/flutter/issues/180842
   if (_autofillContext.count == 0) {
+    _pendingAutofillRemoval = NO;
     if (_activeView.isFirstResponder) {
       // Still first responder: defer removal to hideTextInput,
       // right after resignFirstResponder dismisses the keyboard.
@@ -3145,11 +3146,13 @@ static BOOL IsSelectionRectBoundaryCloserToPoint(CGPoint point,
       // safe to remove immediately since the keyboard is already dismissed.
       [_activeView removeFromSuperview];
       [_inputHider removeFromSuperview];
+      _pendingInputViewRemoval = NO;
     }
   } else {
     // Autofill context exists: removal will be performed in triggerAutofillSave,
     // which is called by finishAutofillContext to save autofill entries.
     _pendingAutofillRemoval = YES;
+    _pendingInputViewRemoval = NO;
   }
 }
 
