@@ -59,9 +59,9 @@ class RenderSliverFillViewport extends RenderSliverFixedExtentBoxAdaptor {
     markNeedsLayout();
   }
 
-  /// Whether the user can traverse to the hidden pages.
+  /// {@macro flutter.widgets.PageView.allowImplicitScrolling}
   ///
-  /// If set to false, the hidden pages are excluded from the semantics tree.
+  /// This is typically used by assistive technologies, such as screen readers.
   bool get allowImplicitScrolling => _allowImplicitScrolling;
   bool _allowImplicitScrolling;
   set allowImplicitScrolling(bool value) {

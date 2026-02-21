@@ -65,17 +65,7 @@ class SliverFillViewport extends StatelessWidget {
   /// {@macro flutter.widgets.SliverMultiBoxAdaptorWidget.delegate}
   final SliverChildDelegate delegate;
 
-  /// Controls whether the widget's children will respond to
-  /// [RenderObject.showOnScreen], which will allow for implicit accessibility
-  /// scrolling.
-  ///
-  /// With this flag set to false, when accessibility focus reaches the end of
-  /// the current child and the user attempts to move it to the next element, the
-  /// focus will traverse to the next widget outside of this sliver.
-  ///
-  /// With this flag set to true, when accessibility focus reaches the end of
-  /// the current child and user attempts to move it to the next element, focus
-  /// will traverse to the next child in the sliver.
+  /// {@macro flutter.widgets.PageView.allowImplicitScrolling}
   final bool allowImplicitScrolling;
 
   @override

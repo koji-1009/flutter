@@ -799,6 +799,7 @@ class PageView extends StatefulWidget {
        scrollCacheExtent =
            scrollCacheExtent ?? ScrollCacheExtent.viewport(allowImplicitScrolling ? 1.0 : 0.0);
 
+  /// {@template flutter.widgets.PageView.allowImplicitScrolling}
   /// Controls whether the widget's pages will respond to
   /// [RenderObject.showOnScreen], which will allow for implicit accessibility
   /// scrolling.
@@ -810,6 +811,7 @@ class PageView extends StatefulWidget {
   /// With this flag set to true, when accessibility focus reaches the end of
   /// the current page and user attempts to move it to the next element, focus
   /// will traverse to the next page in the page view.
+  /// {@endtemplate}
   final bool allowImplicitScrolling;
 
   /// {@macro flutter.rendering.RenderViewportBase.scrollCacheExtent}
