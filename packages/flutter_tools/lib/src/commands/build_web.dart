@@ -145,6 +145,14 @@ class BuildWebCommand extends BuildSubCommand {
       help: 'Whether to strip the resulting wasm file of static symbol names.',
       defaultsTo: true,
     );
+    argParser.addFlag(
+      'content-hash-dir',
+      hide: true,
+      negatable: false,
+      help:
+          'Serve the compile-time program files from a content-hashed '
+          'subdirectory so they can be cached as "immutable" without a service worker.',
+    );
   }
 
   final FileSystem _fileSystem;
@@ -300,6 +308,7 @@ class BuildWebCommand extends BuildSubCommand {
       staticAssetsUrl: staticAssetsUrl,
       outputDirectoryPath: outputDirectoryPath,
       webDefines: webDefines,
+      contentHashDir: boolArg('content-hash-dir'),
     );
     return FlutterCommandResult.success();
   }

@@ -75,6 +75,7 @@ class WebBuilder {
     String? staticAssetsUrl,
     String? outputDirectoryPath,
     Map<String, String> webDefines = const <String, String>{},
+    bool contentHashDir = false,
   }) async {
     if (serviceWorkerStrategy != null) {
       _logger.printWarning(
@@ -105,7 +106,12 @@ class WebBuilder {
     final sw = Stopwatch()..start();
     try {
       final BuildResult result = await _buildSystem.build(
-        globals.buildTargets.webServiceWorker(_fileSystem, compilerConfigs, _analytics),
+        globals.buildTargets.webServiceWorker(
+          _fileSystem,
+          compilerConfigs,
+          _analytics,
+          contentHashDir: contentHashDir,
+        ),
         Environment(
           projectDir: flutterProject.directory,
           outputDir: outputDirectory,

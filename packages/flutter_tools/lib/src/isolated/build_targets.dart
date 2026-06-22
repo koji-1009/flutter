@@ -32,6 +32,12 @@ class BuildTargetsImpl extends BuildTargets {
   Target webServiceWorker(
     FileSystem fileSystem,
     List<WebCompilerConfig> compileConfigs,
-    Analytics analytics,
-  ) => WebServiceWorker(fileSystem, compileConfigs, analytics);
+    Analytics analytics, {
+    bool contentHashDir = false,
+  }) => WebServiceWorker(
+    fileSystem,
+    compileConfigs,
+    analytics,
+    contentHashDir: contentHashDir,
+  );
 }

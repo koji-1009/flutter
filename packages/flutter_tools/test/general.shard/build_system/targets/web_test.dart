@@ -18,6 +18,7 @@ import 'package:flutter_tools/src/globals.dart' as globals;
 import 'package:flutter_tools/src/isolated/mustache_template.dart';
 import 'package:flutter_tools/src/web/compile.dart';
 import 'package:flutter_tools/src/web/file_generators/flutter_service_worker_js.dart';
+import 'package:flutter_tools/src/web/web_content_hash_dir.dart';
 import 'package:flutter_tools/src/web_template.dart';
 import 'package:unified_analytics/unified_analytics.dart';
 
@@ -166,6 +167,197 @@ name: foo
     }),
   );
 
+  group('--content-hash-dir', () {
+    void writeProgramFiles() {
+      environment.projectDir
+          .childDirectory('web')
+          .childFile('index.html')
+          .createSync(recursive: true);
+      environment.buildDir.childFile('main.dart.js').createSync();
+      environment.buildDir.childFile('main.dart.js_1.part.js').createSync();
+    }
+
+    String expectedHash() => computeWebBundleHash(<File>[
+      environment.buildDir.childFile('main.dart.js'),
+      environment.buildDir.childFile('main.dart.js_1.part.js'),
+    ]);
+
+    Directory contentHashRoot() => environment.outputDir.childDirectory(kContentHashDirRoot);
+
+    Future<void> buildBundle() => WebReleaseBundle(
+      <WebCompilerConfig>[const JsCompilerConfig()],
+      const NoOpAnalytics(),
+      contentHashDir: true,
+    ).build(environment);
+
+    // Under --content-hash-dir the templated target depends on the bundle: it
+    // reads the hash dirs the bundle recorded (see [kWebContentHashFile]), so
+    // the bundle must be built first.
+    Future<void> buildTemplated() {
+      final targets = <Dart2WebTarget>[Dart2JSTarget(const JsCompilerConfig())];
+      return WebTemplatedFiles(
+        <Map<String, Object?>>[for (final Dart2WebTarget t in targets) t.buildConfig],
+        compileTargets: targets,
+        contentHashDir: true,
+      ).build(environment);
+    }
+
+    test(
+      'WebReleaseBundle moves the program files under the reserved content-hash directory',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await buildBundle();
+
+        final Directory versioned = contentHashRoot().childDirectory(expectedHash());
+        // The entrypoint and its deferred part move under <root>/<hash>/, clearing the root.
+        expect(environment.outputDir.childFile('main.dart.js'), isNot(exists));
+        expect(versioned.childFile('main.dart.js'), exists);
+        expect(versioned.childFile('main.dart.js_1.part.js'), exists);
+        // The placed files are declared as outputs via the depfile (so the
+        // build system regenerates them if deleted or edited).
+        expect(environment.buildDir.childFile('web_program_files.d'), exists);
+      }),
+    );
+
+    test(
+      'WebTemplatedFiles points buildConfig at the same directory the bundle creates',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await buildBundle();
+        await buildTemplated();
+
+        // Read the directory the loader was told to use, and confirm the bundle
+        // put the files exactly there (the two targets agree).
+        final RegExpMatch? match = RegExp(r'"mainJsPath":"([^"]+)/main\.dart\.js"').firstMatch(
+          environment.outputDir.childFile('flutter_bootstrap.js').readAsStringSync(),
+        );
+        expect(match, isNotNull);
+        final String dir = match!.group(1)!;
+        expect(dir, '$kContentHashDirRoot/${expectedHash()}');
+        expect(environment.outputDir.childDirectory(kContentHashDirRoot).existsSync(), isTrue);
+        expect(
+          contentHashRoot().childDirectory(expectedHash()).childFile('main.dart.js'),
+          exists,
+        );
+      }),
+    );
+
+    Set<String> hashDirs() => contentHashRoot()
+        .listSync()
+        .whereType<Directory>()
+        .map((Directory d) => d.basename)
+        .toSet();
+
+    test(
+      'wipes stale hash directories on rebuild and reuses the asset hash when only the program changes',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await buildBundle();
+        final String firstHash = expectedHash();
+        // Two sibling dirs: the program hash and the separately-computed asset hash.
+        final Set<String> firstDirs = hashDirs();
+        expect(firstDirs, hasLength(2));
+        expect(firstDirs, contains(firstHash));
+        final String assetHash = firstDirs.firstWhere((String h) => h != firstHash);
+
+        // Change only the program and rebuild.
+        environment.buildDir.childFile('main.dart.js').writeAsStringSync('changed');
+        await buildBundle();
+        final String secondHash = expectedHash();
+
+        expect(secondHash, isNot(firstHash));
+        // The old program dir is wiped; the asset dir is unchanged, so an
+        // asset-unrelated change does not re-version (re-download) the assets.
+        expect(hashDirs(), <String>{secondHash, assetHash});
+      }),
+    );
+
+    test(
+      'places assets under their own hash dir and points assetBase at it',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await buildBundle();
+        await buildTemplated();
+
+        // assetBase in the buildConfig must point at an existing _flutter/<hash>/
+        // dir that actually holds the copied assets (the two targets agree).
+        final RegExpMatch? match = RegExp(r'"assetBase":"([^"]+)/"').firstMatch(
+          environment.outputDir.childFile('flutter_bootstrap.js').readAsStringSync(),
+        );
+        expect(match, isNotNull, reason: 'assetBase should be emitted under --content-hash-dir');
+        final String assetBaseDir = match!.group(1)!;
+        expect(assetBaseDir, startsWith('$kContentHashDirRoot/'));
+        expect(
+          environment.outputDir.childDirectory(assetBaseDir).childDirectory('assets').existsSync(),
+          isTrue,
+        );
+        // Assets are not left at the stable output-root location.
+        expect(environment.outputDir.childDirectory('assets'), isNot(exists));
+      }),
+    );
+
+    test(
+      'records the emitted hash dirs so the templated target re-generates assetBase on change',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await buildBundle();
+
+        // The bundle records the dirs it emitted into. WebTemplatedFiles declares
+        // this file as an input, so an asset-only change (which re-runs the bundle
+        // and rewrites the file) re-runs the templated target instead of leaving
+        // flutter_bootstrap.js pointing assetBase at a wiped hash dir.
+        final File record = environment.buildDir.childFile(kWebContentHashFile);
+        expect(record, exists);
+        final json = jsonDecode(record.readAsStringSync()) as Map<String, Object?>;
+        expect(json['programDir'], '$kContentHashDirRoot/${expectedHash()}');
+        final assetBase = json['assetBase']! as String;
+        expect(assetBase, startsWith('$kContentHashDirRoot/'));
+        expect(assetBase, endsWith('/'));
+        // The recorded assetBase names a real, populated hash dir.
+        expect(
+          environment.outputDir
+              .childDirectory(assetBase.substring(0, assetBase.length - 1))
+              .childDirectory('assets')
+              .existsSync(),
+          isTrue,
+        );
+
+        // The templated target consumes the record and points the bootstrap at it.
+        await buildTemplated();
+        expect(
+          environment.outputDir.childFile('flutter_bootstrap.js').readAsStringSync(),
+          contains('"assetBase":"$assetBase"'),
+        );
+      }),
+    );
+
+    test(
+      'without the flag, program files stay at the output root and no reserved directory is written',
+      () => testbed.run(() async {
+        environment.defines[kBuildMode] = 'release';
+        writeProgramFiles();
+
+        await WebReleaseBundle(<WebCompilerConfig>[
+          const JsCompilerConfig(),
+        ], const NoOpAnalytics()).build(environment);
+
+        expect(environment.outputDir.childFile('main.dart.js'), exists);
+        expect(contentHashRoot(), isNot(exists));
+        expect(environment.buildDir.childFile('web_program_files.d'), isNot(exists));
+      }),
+    );
+  });
+
   test(
     'Base href is created in index.html with given base-href after release build',
     () => testbed.run(() async {
@@ -216,7 +408,7 @@ name: foo
 
       expect(
         environment.outputDir.childFile('flutter_bootstrap.js').readAsStringSync(),
-        contains('_flutter.loader.load();'),
+        stringContainsInOrder(<String>['_flutter.loader.load({', 'config', 'assetBase', '});']),
       );
     }),
   );

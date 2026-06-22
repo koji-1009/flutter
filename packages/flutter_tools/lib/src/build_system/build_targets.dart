@@ -19,8 +19,9 @@ abstract class BuildTargets {
   Target webServiceWorker(
     FileSystem fileSystem,
     List<WebCompilerConfig> compileConfigs,
-    Analytics analytics,
-  );
+    Analytics analytics, {
+    bool contentHashDir,
+  });
 }
 
 /// BuildTargets that return NoOpTarget for every action.
@@ -43,8 +44,9 @@ class NoOpBuildTargets extends BuildTargets {
   Target webServiceWorker(
     FileSystem fileSystem,
     List<WebCompilerConfig> compileConfigs,
-    Analytics analytics,
-  ) => const _NoOpTarget();
+    Analytics analytics, {
+    bool contentHashDir = false,
+  }) => const _NoOpTarget();
 }
 
 /// A [Target] that does nothing.

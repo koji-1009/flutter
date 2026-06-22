@@ -11,6 +11,7 @@ import 'package:unified_analytics/unified_analytics.dart';
 
 import '../../artifacts.dart';
 import '../../base/common.dart';
+import '../../base/error_handling_io.dart';
 import '../../base/file_system.dart';
 import '../../base/process.dart';
 import '../../build_info.dart';
@@ -27,6 +28,7 @@ import '../../web/bootstrap.dart';
 import '../../web/compile.dart';
 import '../../web/file_generators/flutter_service_worker_js.dart';
 import '../../web/file_generators/main_dart.dart' as main_dart;
+import '../../web/web_content_hash_dir.dart';
 import '../../web_template.dart';
 import '../build_system.dart';
 import '../depfile.dart';
@@ -113,6 +115,9 @@ abstract class Dart2WebTarget extends Target {
   WebCompilerConfig get compilerConfig;
 
   Map<String, Object?> get buildConfig;
+
+  Iterable<String> get entrypointPathKeys;
+
   Iterable<File> buildFiles(Environment environment);
   Iterable<String> get buildPatternStems;
 
@@ -257,6 +262,9 @@ class Dart2JSTarget extends Dart2WebTarget {
     'renderer': compilerConfig.renderer.name,
     'mainJsPath': 'main.dart.js',
   };
+
+  @override
+  Iterable<String> get entrypointPathKeys => const <String>['mainJsPath'];
 
   @override
   Iterable<File> buildFiles(Environment environment) =>
@@ -412,6 +420,9 @@ class Dart2WasmTarget extends Dart2WebTarget {
           'mainWasmPath': 'main.dart.wasm',
           'jsSupportRuntimePath': 'main.dart.mjs',
         };
+
+  @override
+  Iterable<String> get entrypointPathKeys => const <String>['mainWasmPath', 'jsSupportRuntimePath'];
 
   @override
   Iterable<File> buildFiles(Environment environment) => compilerConfig.dryRun
@@ -573,25 +584,33 @@ class Dart2WasmTarget extends Dart2WebTarget {
 /// Unpacks the dart2js or dart2wasm compilation and resources to a given
 /// output directory.
 class WebReleaseBundle extends Target {
-  WebReleaseBundle(List<WebCompilerConfig> configs, Analytics analytics)
-    : this._(
-        compileTargets: configs
-            .map(
-              (WebCompilerConfig config) => switch (config) {
-                WasmCompilerConfig() => Dart2WasmTarget(config, analytics),
-                JsCompilerConfig() => Dart2JSTarget(config),
-              },
-            )
-            .toList(),
-      );
+  WebReleaseBundle(
+    List<WebCompilerConfig> configs,
+    Analytics analytics, {
+    bool contentHashDir = false,
+  }) : this._(
+         compileTargets: configs
+             .map(
+               (WebCompilerConfig config) => switch (config) {
+                 WasmCompilerConfig() => Dart2WasmTarget(config, analytics),
+                 JsCompilerConfig() => Dart2JSTarget(config),
+               },
+             )
+             .toList(),
+         contentHashDir: contentHashDir,
+       );
 
-  WebReleaseBundle._({required this.compileTargets})
-    : templatedFilesTarget = WebTemplatedFiles(
-        compileTargets.map((Dart2WebTarget target) => target.buildConfig).toList(),
-      );
+  WebReleaseBundle._({required this.compileTargets, required this.contentHashDir})
+    : templatedFilesTarget = contentHashDir
+          ? null
+          : WebTemplatedFiles(
+              compileTargets.map((Dart2WebTarget target) => target.buildConfig).toList(),
+              compileTargets: compileTargets,
+            );
 
   final List<Dart2WebTarget> compileTargets;
-  final WebTemplatedFiles templatedFilesTarget;
+  final WebTemplatedFiles? templatedFilesTarget;
+  final bool contentHashDir;
 
   @override
   String get name => 'web_release_bundle';
@@ -599,7 +618,7 @@ class WebReleaseBundle extends Target {
   @override
   List<Target> get dependencies => <Target>[
     ...compileTargets,
-    templatedFilesTarget,
+    ?templatedFilesTarget,
     LinkHooks(platform: HookPlatform.web, extraDependencies: compileTargets),
   ];
 
@@ -614,22 +633,46 @@ class WebReleaseBundle extends Target {
   ];
 
   @override
-  List<Source> get outputs => <Source>[
-    ...buildPatternStems.map((String file) => Source.pattern('{OUTPUT_DIR}/$file')),
-  ];
+  List<Source> get outputs => contentHashDir
+      // No static outputs: the hash dir name is only known at build time, so the
+      // placed files are tracked by the web_program_files.d depfile instead.
+      ? const <Source>[]
+      : <Source>[...buildPatternStems.map((String file) => Source.pattern('{OUTPUT_DIR}/$file'))];
 
   @override
-  List<String> get depfiles => const <String>['flutter_assets.d', 'web_resources.d'];
+  List<String> get depfiles => <String>[
+    'flutter_assets.d',
+    'web_resources.d',
+    if (contentHashDir) 'web_program_files.d',
+  ];
 
   @override
   Future<void> build(Environment environment) async {
     final FileSystem fileSystem = environment.fileSystem;
-    for (final Dart2WebTarget target in compileTargets) {
-      for (final File outputFile in target.buildFiles(environment)) {
-        outputFile.copySync(
-          environment.outputDir.childFile(fileSystem.path.basename(outputFile.path)).path,
-        );
-      }
+    // Program files emit flat into the output root, or — under --content-hash-dir —
+    // into a freshly-wiped _flutter/<hash>/ named by their content hash.
+    final List<File> programFiles = compileTargets
+        .expand((Dart2WebTarget target) => target.buildFiles(environment))
+        .toList();
+    var programHash = '';
+    final Directory programDir;
+    if (contentHashDir) {
+      programHash = computeWebBundleHash(programFiles);
+      final Directory root = environment.outputDir.childDirectory(kContentHashDirRoot);
+      ErrorHandlingFileSystem.deleteIfExists(root, recursive: true);
+      programDir = root.childDirectory(programHash)..createSync(recursive: true);
+    } else {
+      programDir = environment.outputDir;
+    }
+    final placed = <File>[
+      for (final File outputFile in programFiles)
+        outputFile.copySync(programDir.childFile(fileSystem.path.basename(outputFile.path)).path),
+    ];
+    if (contentHashDir) {
+      environment.depFileService.writeToFile(
+        Depfile(programFiles, placed),
+        environment.buildDir.childFile('web_program_files.d'),
+      );
     }
 
     final String? buildModeEnvironment = environment.defines[kBuildMode];
@@ -639,20 +682,66 @@ class WebReleaseBundle extends Target {
     final buildMode = BuildMode.fromCliName(buildModeEnvironment);
 
     createVersionFile(environment, environment.defines);
-    final Directory outputDirectory = environment.outputDir.childDirectory('assets');
-    outputDirectory.createSync(recursive: true);
 
     final DartHooksResult dartHookResult = await LinkHooks.loadHookResult(environment);
+    final DepfileService depfileService = environment.depFileService;
+    // With --content-hash-dir, assets emit into a staging dir whose bytes are
+    // hashed and the dir then renamed to that hash; otherwise the stable root.
+    final Directory assetParent = contentHashDir
+        ? environment.outputDir.childDirectory(kContentHashDirRoot).childDirectory('_staging')
+        : environment.outputDir;
+    final Directory outputDirectory = assetParent.childDirectory('assets');
+    outputDirectory.createSync(recursive: true);
     final Depfile depfile = await copyAssets(
       environment,
-      environment.outputDir.childDirectory('assets'),
+      outputDirectory,
       dartHookResult: dartHookResult,
       targetPlatform: TargetPlatform.web_javascript,
       buildMode: buildMode,
     );
-    final Depfile bundledDepfile = _bundleLocalRobotoFallback(environment, depfile);
-    final DepfileService depfileService = environment.depFileService;
-    depfileService.writeToFile(bundledDepfile, environment.buildDir.childFile('flutter_assets.d'));
+    final Depfile bundledDepfile = _bundleLocalRobotoFallback(
+      environment,
+      depfile,
+      outputDirectory,
+    );
+
+    if (contentHashDir) {
+      // Hash the actually-served bytes, then rename the staging dir to that hash
+      // so it is safe to cache as immutable. <root> was wiped above and `_staging`
+      // is never a 16-hex-char hash, so it cannot collide with a real hash dir.
+      final String assetHash = computeWebBundleHash(
+        outputDirectory.listSync(recursive: true).whereType<File>(),
+      );
+      final Directory versioned = environment.outputDir
+          .childDirectory(kContentHashDirRoot)
+          .childDirectory(assetHash);
+      assetParent.renameSync(versioned.path);
+
+      // Re-point the depfile outputs from the staging path to the final hash dir.
+      final List<File> placedAssets = bundledDepfile.outputs
+          .map((File f) => fileSystem.file(f.path.replaceFirst(assetParent.path, versioned.path)))
+          .toList();
+      depfileService.writeToFile(
+        Depfile(bundledDepfile.inputs, placedAssets),
+        environment.buildDir.childFile('flutter_assets.d'),
+      );
+
+      // Record the dirs so [WebTemplatedFiles] (which depends on this target)
+      // points the bootstrap's entrypoints and assetBase at the same locations.
+      environment.buildDir
+          .childFile(kWebContentHashFile)
+          .writeAsStringSync(
+            jsonEncode(<String, String>{
+              'programDir': '$kContentHashDirRoot/$programHash',
+              'assetBase': '$kContentHashDirRoot/$assetHash/',
+            }),
+          );
+    } else {
+      depfileService.writeToFile(
+        bundledDepfile,
+        environment.buildDir.childFile('flutter_assets.d'),
+      );
+    }
 
     final Directory webResources = environment.projectDir.childDirectory('web');
     final List<File> inputResourceFiles = webResources
@@ -697,14 +786,16 @@ class WebReleaseBundle extends Target {
     environment.outputDir.childFile('version.json').writeAsStringSync(jsonEncode(versionInfo));
   }
 
-  Depfile _bundleLocalRobotoFallback(Environment environment, Depfile depfile) {
+  Depfile _bundleLocalRobotoFallback(
+    Environment environment,
+    Depfile depfile,
+    Directory assetsDir,
+  ) {
     if (environment.defines[kUseLocalCanvasKitFlag] != 'true') {
       return depfile;
     }
 
-    final File fontManifestFile = environment.outputDir
-        .childDirectory('assets')
-        .childFile(_kFontManifestJsonFile);
+    final File fontManifestFile = assetsDir.childFile(_kFontManifestJsonFile);
     final manifestJson = fontManifestFile.existsSync()
         ? (jsonDecode(fontManifestFile.readAsStringSync()) as List<Object?>)
         : <Object?>[];
@@ -741,9 +832,7 @@ class WebReleaseBundle extends Target {
     fontManifestFile.parent.createSync(recursive: true);
     fontManifestFile.writeAsStringSync(jsonEncode(manifestJson));
 
-    final File bundledRobotoFont = environment.outputDir
-        .childDirectory('assets')
-        .childFile(_kBundledFallbackRobotoAsset);
+    final File bundledRobotoFont = assetsDir.childFile(_kBundledFallbackRobotoAsset);
     bundledRobotoFont.parent.createSync(recursive: true);
     sourceRobotoFont.copySync(bundledRobotoFont.path);
 
@@ -755,9 +844,22 @@ class WebReleaseBundle extends Target {
 }
 
 class WebTemplatedFiles extends Target {
-  WebTemplatedFiles(this.buildDescriptions);
+  WebTemplatedFiles(
+    this.buildDescriptions, {
+    this.compileTargets = const <Dart2WebTarget>[],
+    this.contentHashDir = false,
+    WebReleaseBundle? bundleDependency,
+  }) : _bundleDependency = bundleDependency;
 
   final List<Map<String, Object?>> buildDescriptions;
+  final List<Dart2WebTarget> compileTargets;
+  final bool contentHashDir;
+
+  WebReleaseBundle? _bundleDependency;
+  WebReleaseBundle get _bundle => _bundleDependency ??= WebReleaseBundle._(
+    compileTargets: compileTargets,
+    contentHashDir: true,
+  );
 
   @override
   String get buildKey => jsonEncode(buildDescriptions);
@@ -772,7 +874,10 @@ class WebTemplatedFiles extends Target {
     );
   }
 
-  String buildConfigString(Environment environment) {
+  String buildConfigString(
+    Environment environment,
+    ({String programDir, String assetBase})? hashDirs,
+  ) {
     // Calculate SHA-256 hashes for WASM assets to support Cross-Origin Storage
     // (https://wicg.github.io/cross-origin-storage/). This assumes that the files will exist in
     // the output directory at this point.
@@ -810,10 +915,21 @@ class WebTemplatedFiles extends Target {
       }
     }
 
+    // Point the entrypoints at the same <root>/<hash>/ the bundle emitted into.
+    List<Map<String, Object?>> builds = buildDescriptions;
+    if (hashDirs != null) {
+      builds = <Map<String, Object?>>[
+        for (final Dart2WebTarget target in compileTargets)
+          prefixEntrypointPaths(target.buildConfig, hashDirs.programDir, target.entrypointPathKeys),
+      ];
+    }
+
     final buildConfig = <String, Object>{
       'engineRevision': globals.flutterVersion.engineRevision,
       'wasmHashes': wasmHashes,
-      'builds': buildDescriptions,
+      'builds': builds,
+      // assetBase must end with `/` (engine asserts).
+      'assetBase': ?hashDirs?.assetBase,
       if (environment.defines[kUseLocalCanvasKitFlag] == 'true') 'useLocalCanvasKit': true,
     };
     return '''
@@ -851,7 +967,19 @@ _flutter.buildConfig = ${jsonEncode(buildConfig)};
       ),
     );
 
-    final String buildConfig = buildConfigString(environment);
+    // The hash dirs the bundle recorded in kWebContentHashFile (only under
+    // --content-hash-dir); used to point the bootstrap at them.
+    ({String programDir, String assetBase})? hashDirs;
+    if (contentHashDir) {
+      final json =
+          jsonDecode(environment.buildDir.childFile(kWebContentHashFile).readAsStringSync())
+              as Map<String, Object?>;
+      hashDirs = (
+        programDir: json['programDir']! as String,
+        assetBase: json['assetBase']! as String,
+      );
+    }
+    final String buildConfig = buildConfigString(environment, hashDirs);
 
     // Extract web-define variables from the environment. These are stored with
     // the [kWebDefinePrefix] prefix by [WebBuilder.buildWeb].
@@ -909,13 +1037,16 @@ _flutter.buildConfig = ${jsonEncode(buildConfig)};
   }
 
   @override
-  List<Target> get dependencies => <Target>[];
+  List<Target> get dependencies => contentHashDir ? <Target>[_bundle] : const <Target>[];
 
   @override
-  List<Source> get inputs => const <Source>[
-    Source.pattern('{PROJECT_DIR}/web/*/index.html'),
-    Source.pattern('{PROJECT_DIR}/web/flutter_bootstrap.js'),
-    Source.hostArtifact(HostArtifact.flutterWebSdk),
+  List<Source> get inputs => <Source>[
+    const Source.pattern('{PROJECT_DIR}/web/*/index.html'),
+    const Source.pattern('{PROJECT_DIR}/web/flutter_bootstrap.js'),
+    const Source.hostArtifact(HostArtifact.flutterWebSdk),
+    // The bundle records the emitted hash dirs here; a changed program or asset
+    // re-runs the bundle, rewrites this file, and so re-runs this target.
+    if (contentHashDir) const Source.pattern('{BUILD_DIR}/$kWebContentHashFile'),
   ];
 
   @override
@@ -996,20 +1127,40 @@ class WebBuiltInAssets extends Target {
 
 /// Generate a service worker for a web target.
 class WebServiceWorker extends Target {
-  const WebServiceWorker(this.fileSystem, this.compileConfigs, this.analytics);
+  const WebServiceWorker(
+    this.fileSystem,
+    this.compileConfigs,
+    this.analytics, {
+    this.contentHashDir = false,
+  });
 
   final FileSystem fileSystem;
   final List<WebCompilerConfig> compileConfigs;
   final Analytics analytics;
+  final bool contentHashDir;
 
   @override
   String get name => 'web_service_worker';
 
   @override
-  List<Target> get dependencies => <Target>[
-    WebReleaseBundle(compileConfigs, analytics),
-    WebBuiltInAssets(fileSystem),
-  ];
+  List<Target> get dependencies {
+    final bundle = WebReleaseBundle(compileConfigs, analytics, contentHashDir: contentHashDir);
+    return <Target>[
+      // Under --content-hash-dir the templated files must run *after* the bundle
+      // emits the assets (the bootstrap's assetBase is the hash of those bytes),
+      // so depend on the templated target, which depends on the bundle.
+      if (contentHashDir)
+        WebTemplatedFiles(
+          bundle.compileTargets.map((Dart2WebTarget target) => target.buildConfig).toList(),
+          compileTargets: bundle.compileTargets,
+          contentHashDir: true,
+          bundleDependency: bundle,
+        )
+      else
+        bundle,
+      WebBuiltInAssets(fileSystem),
+    ];
+  }
 
   @override
   List<String> get depfiles => const <String>['service_worker.d'];
