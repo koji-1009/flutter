@@ -3763,6 +3763,12 @@ class EditableTextState extends State<EditableText>
   void performAction(TextInputAction action) {
     switch (action) {
       case TextInputAction.newline:
+        // The iOS engine reports Return on the default return key as newline;
+        // perform the widget's action rather than newline.
+        if (_usesDefaultReturnKeyForCreditCardNumberPadOnIOS) {
+          _finalizeEditing(widget.textInputAction ?? TextInputAction.done, shouldUnfocus: true);
+          return;
+        }
         // If this is a multiline EditableText, do nothing for a "newline"
         // action; The newline is already inserted. Otherwise, finalize
         // editing.
@@ -4057,6 +4063,40 @@ class EditableTextState extends State<EditableText>
 
   bool get _hasFocus => widget.focusNode.hasFocus;
   bool get _isMultiline => widget.maxLines != 1;
+
+  // Whether to ask iOS for the default return key. iOS shows the numbers and
+  // punctuation keyboard instead of the number pad for a credit card number
+  // field unless the return key is the default one. True for a single-line
+  // field with that hint and a number pad, to keep the pad without giving up
+  // the hint. False for any other field, which keeps its own return key.
+  // https://github.com/flutter/flutter/issues/104604
+  bool get _usesDefaultReturnKeyForCreditCardNumberPadOnIOS {
+    // Only UIKit replaces the keyboard; on the web defaultTargetPlatform can be
+    // iOS without it.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return false;
+    }
+
+    // In a multiline field the newline action is the inserted newline itself,
+    // so performAction could not turn it into the widget's action.
+    if (_isMultiline) {
+      return false;
+    }
+
+    // The keyboard types the iOS engine maps to a number pad. A signed number
+    // gets the numbers and punctuation keyboard, which iOS does not replace, and
+    // password does not change the keyboard on iOS.
+    const numberPadKeyboardTypes = <TextInputType>[
+      TextInputType.number,
+      TextInputType.numberWithOptions(decimal: true),
+      TextInputType.numberWithOptions(password: true),
+      TextInputType.numberWithOptions(decimal: true, password: true),
+    ];
+    final bool isNumberPad = numberPadKeyboardTypes.contains(widget.keyboardType);
+    final bool isCreditCardNumber =
+        widget.autofillHints?.contains(AutofillHints.creditCardNumber) ?? false;
+    return isNumberPad && isCreditCardNumber;
+  }
 
   /// Flag to track whether this [EditableText] was in focus when [onTapOutside]
   /// was called.
@@ -5377,6 +5417,15 @@ class EditableTextState extends State<EditableText>
             currentEditingValue: currentTextEditingValue,
           )
         : AutofillConfiguration.disabled;
+    TextInputAction inputAction =
+        widget.textInputAction ??
+        (widget.keyboardType == TextInputType.multiline
+            ? TextInputAction.newline
+            : TextInputAction.done);
+    // unspecified is the only action the iOS engine maps to the default return key.
+    if (_usesDefaultReturnKeyForCreditCardNumberPadOnIOS) {
+      inputAction = TextInputAction.unspecified;
+    }
 
     _viewId = View.of(context).viewId;
     return TextInputConfiguration(
@@ -5389,11 +5438,7 @@ class EditableTextState extends State<EditableText>
       smartQuotesType: widget.smartQuotesType,
       enableSuggestions: widget.enableSuggestions,
       enableInteractiveSelection: widget._userSelectionEnabled,
-      inputAction:
-          widget.textInputAction ??
-          (widget.keyboardType == TextInputType.multiline
-              ? TextInputAction.newline
-              : TextInputAction.done),
+      inputAction: inputAction,
       textCapitalization: widget.textCapitalization,
       keyboardAppearance: widget.keyboardAppearance,
       autofillConfiguration: autofillConfiguration,

@@ -4472,6 +4472,121 @@ void main() {
     skip: kIsWeb, // [intended]
   );
 
+  testWidgets(
+    'iOS credit card number field on a number pad requests the unspecified input action',
+    (WidgetTester tester) async {
+      // Regression test for https://github.com/flutter/flutter/issues/104604.
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: EditableText(
+              controller: controller,
+              backgroundCursorColor: Colors.grey,
+              focusNode: focusNode,
+              style: textStyle,
+              cursorColor: cursorColor,
+              keyboardType: TextInputType.number,
+              autofillHints: const <String>[AutofillHints.creditCardNumber],
+              textInputAction: TextInputAction.next,
+            ),
+          ),
+        ),
+      );
+      await tester.showKeyboard(find.byType(EditableText));
+
+      expect(
+        tester.testTextInput.setClientArgs!['inputAction'],
+        equals('TextInputAction.unspecified'),
+      );
+    },
+    variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.iOS}),
+    skip: kIsWeb, // [intended]
+  );
+
+  testWidgets(
+    'iOS credit card number field keeps its input action on a signed number keyboard',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: EditableText(
+              controller: controller,
+              backgroundCursorColor: Colors.grey,
+              focusNode: focusNode,
+              style: textStyle,
+              cursorColor: cursorColor,
+              keyboardType: const TextInputType.numberWithOptions(signed: true),
+              autofillHints: const <String>[AutofillHints.creditCardNumber],
+              textInputAction: TextInputAction.next,
+            ),
+          ),
+        ),
+      );
+      await tester.showKeyboard(find.byType(EditableText));
+
+      expect(tester.testTextInput.setClientArgs!['inputAction'], equals('TextInputAction.next'));
+    },
+    variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.iOS}),
+    skip: kIsWeb, // [intended]
+  );
+
+  testWidgets(
+    'iOS credit card number field performs its input action when the newline action is received',
+    (WidgetTester tester) async {
+      final nextFocusNode = FocusNode();
+      addTearDown(nextFocusNode.dispose);
+      final nextController = TextEditingController();
+      addTearDown(nextController.dispose);
+      String? submitted;
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Column(
+              children: <Widget>[
+                EditableText(
+                  controller: controller,
+                  backgroundCursorColor: Colors.grey,
+                  focusNode: focusNode,
+                  style: textStyle,
+                  cursorColor: cursorColor,
+                  keyboardType: TextInputType.number,
+                  autofillHints: const <String>[AutofillHints.creditCardNumber],
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (String value) => submitted = value,
+                ),
+                EditableText(
+                  controller: nextController,
+                  backgroundCursorColor: Colors.grey,
+                  focusNode: nextFocusNode,
+                  style: textStyle,
+                  cursorColor: cursorColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.showKeyboard(find.byType(EditableText).first);
+      controller.text = '4242';
+
+      await tester.testTextInput.receiveAction(TextInputAction.newline);
+      await tester.pump();
+
+      expect(submitted, '4242');
+      expect(focusNode.hasFocus, isFalse);
+      expect(nextFocusNode.hasFocus, isTrue);
+    },
+    variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.iOS}),
+    skip: kIsWeb, // [intended]
+  );
+
   testWidgets('Changing controller updates EditableText', (WidgetTester tester) async {
     final controller1 = TextEditingController(text: 'Wibble');
     addTearDown(controller1.dispose);
